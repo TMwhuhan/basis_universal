@@ -1,4 +1,7 @@
-set(BASISU_HEADER_FILES
+add_library(basisu "")
+
+target_sources(basisu
+		PRIVATE
 		transcoder/basisu.h
 		transcoder/basisu_file_headers.h
 		transcoder/basisu_global_selector_palette.h
@@ -15,8 +18,6 @@ set(BASISU_HEADER_FILES
 		basisu_pvrtc1_4.h
 		basisu_resampler.h
 		basisu_ssim.h
-        )
-set(BASISU_SOURCE_FILES
 		transcoder/basisu_transcoder.cpp
 		basisu_backend.cpp
 		basisu_basis_file.cpp
@@ -31,13 +32,7 @@ set(BASISU_SOURCE_FILES
 		basisu_resample_filters.cpp
 		basisu_ssim.cpp
 		lodepng.cpp
-        )
-set(BASISU_SOURCES
-		${BASISU_HEADER_FILES}
-		${BASISU_SOURCE_FILES}
-        )
-		
-add_library(basisu ${BASISU_SOURCES})
+		)
 
 # FIXME what changed and how do I apply it here?
 # set(GCC_COMPILE_FLAGS "-fvisibility=hidden -fvisibility-inlines-hidden -fPIC -fno-strict-aliasing -D_LARGEFILE64_SOURCE=1 -D_FILE_OFFSET_BITS=64 -Wall -Wextra -Wno-unused-local-typedefs -Wno-unused-value -Wno-unused-parameter -Wno-unused-variable -Wno-reorder")
