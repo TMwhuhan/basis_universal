@@ -14,11 +14,12 @@
 // limitations under the License.
 #pragma once
 
-#include "transcoder/basisu.h"
 #include "basisu_enc.h"
-#include "transcoder/basisu_transcoder_internal.h"
-#include "transcoder/basisu_global_selector_palette.h"
 #include "basisu_frontend.h"
+
+#include <transcoder/basisu.h>
+#include <transcoder/basisu_transcoder_internal.h>
+#include <transcoder/basisu_global_selector_palette.h>
 
 namespace basisu
 {

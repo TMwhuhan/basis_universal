@@ -17,7 +17,7 @@
 #include "basisu_resampler.h"
 #include "basisu_resampler_filters.h"
 #include "basisu_etc.h"
-#include "transcoder/basisu_transcoder.h"
+#include <transcoder/basisu_transcoder.h>
 
 #if defined(_WIN32)
 // For QueryPerformanceCounter/QueryPerformanceFrequency

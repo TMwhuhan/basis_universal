@@ -13,9 +13,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 #pragma once
-#include "transcoder/basisu.h"
 #include "basisu_enc.h"
-#include "transcoder/basisu_transcoder_internal.h"
+
+#include <transcoder/basisu.h>
+#include <transcoder/basisu_transcoder_internal.h>
 
 #include <mutex>
 #include <atomic>

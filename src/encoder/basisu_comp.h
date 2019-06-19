@@ -16,8 +16,9 @@
 #include "basisu_frontend.h"
 #include "basisu_backend.h"
 #include "basisu_basis_file.h"
-#include "transcoder/basisu_global_selector_palette.h"
-#include "transcoder/basisu_transcoder.h"
+
+#include <transcoder/basisu_global_selector_palette.h>
+#include <transcoder/basisu_transcoder.h>
 
 namespace basisu
 {
