@@ -13,10 +13,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 #include "basisu_enc.h"
-#include "lodepng.h"
 #include "basisu_resampler.h"
 #include "basisu_resampler_filters.h"
 #include "basisu_etc.h"
+#include <lodepng.h>
 #include <transcoder/basisu_transcoder.h>
 
 #if defined(_WIN32)
