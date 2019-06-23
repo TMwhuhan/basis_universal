@@ -1,12 +1,16 @@
+macro(BAKE_LODEPNG)
+    add_library(lodepng OBJECT ${PROJECT_SOURCE_DIR}/third-party/lodepng/lodepng.cpp)
+    set_target_properties(lodepng PROPERTIES FOLDER "ThirdParty")
+    set(LODEPNG_LIBRARY lodepng)
+    set(LODEPNG_INCLUDE ${PROJECT_SOURCE_DIR}/third-party/lodepng)
+endmacro()
+
 macro(FIND_LODEPNG)
     find_library(LODEPNG_LIBRARY lodepng)
     find_path(LODEPNG_INCLUDE lodepng.h)
     if ((NOT LODEPNG_LIBRARY) OR (NOT LODEPNG_INCLUDE))
         message(STATUS "lodepng library not found, using bundled source")
-        add_library(lodepng OBJECT ${PROJECT_SOURCE_DIR}/third-party/lodepng/lodepng.cpp)
-        set(LODEPNG_LIBRARY lodepng)
-        set(LODEPNG_INCLUDE ${PROJECT_SOURCE_DIR}/third-party/lodepng)
-        set_target_properties(lodepng PROPERTIES FOLDER "ThirdParty")
+        bake_lodepng()
     endif()
 endmacro()
 
@@ -45,7 +49,13 @@ set_target_properties(basisu_encoder PROPERTIES
 		FOLDER "basisu"
         )
 
-find_lodepng()
+if (BASISU_ITERATOR_DEBUG)
+    # with debug iterator at level 1, we MUST use an embedded version of lodepng to ensure it has the same 
+    # iterator setting
+    bake_lodepng()
+else()
+    find_lodepng()
+endif()
 
 target_include_directories(basisu_encoder
 		PUBLIC
