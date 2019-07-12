@@ -648,10 +648,15 @@ static bool compress_mode(command_line_params &opts)
 	params.m_write_output_basis_files = true;
 	params.m_pSel_codebook = &sel_codebook;
 
-	FILE *pCSV_file = nullptr;
+	std::unique_ptr<FILE, std::function<void(FILE*)>> pCSV_file;
 	if (opts.m_csv_file.size())
 	{
-		pCSV_file = fopen_safe(opts.m_csv_file.c_str(), "a");
+		pCSV_file = std::unique_ptr<FILE, std::function<void(FILE*)>>(fopen_safe(opts.m_csv_file.c_str(), "a"), [](FILE* pFile) {
+			if (pFile) {
+				fclose(pFile);
+			}
+		});
+
 		if (!pCSV_file)
 		{
 			error_printf("Failed opening CVS file \"%s\"\n", opts.m_csv_file.c_str());
@@ -660,7 +665,7 @@ static bool compress_mode(command_line_params &opts)
 	}
 
 	printf("Processing %u total files\n", (uint32_t)opts.m_input_filenames.size());
-				
+
 	for (size_t file_index = 0; file_index < (opts.m_individual ? opts.m_input_filenames.size() : 1U); file_index++)
 	{
 		if (opts.m_individual)
@@ -709,13 +714,6 @@ static bool compress_mode(command_line_params &opts)
 		if (!c.init(opts.m_comp_params))
 		{
 			error_printf("basis_compressor::init() failed!\n");
-
-			if (pCSV_file)
-			{
-				fclose(pCSV_file);
-				pCSV_file = nullptr;
-			}
-
 			return false;
 		}
 
@@ -770,12 +768,6 @@ static bool compress_mode(command_line_params &opts)
 		
 			if (exit_flag)
 			{
-				if (pCSV_file)
-				{
-					fclose(pCSV_file);
-					pCSV_file = nullptr;
-				}
-
 				return false;
 			}
 		}
@@ -784,7 +776,7 @@ static bool compress_mode(command_line_params &opts)
 		{
 			for (size_t slice_index = 0; slice_index < c.get_stats().size(); slice_index++)
 			{
-				fprintf(pCSV_file, "\"%s\", %u, %u, %u, %u, %u, %f, %f, %f, %f, %u, %u, %f\n",
+				fprintf(pCSV_file.get(), "\"%s\", %u, %u, %u, %u, %u, %f, %f, %f, %f, %u, %u, %f\n",
 					params.m_out_filename.c_str(),
 					(uint32_t)slice_index, (uint32_t)c.get_stats().size(),
 					c.get_stats()[slice_index].m_width, c.get_stats()[slice_index].m_height, (uint32_t)c.get_any_source_image_has_alpha(),
@@ -793,7 +785,7 @@ static bool compress_mode(command_line_params &opts)
 					c.get_stats()[slice_index].m_basis_etc1s_luma_709_psnr,
 					c.get_stats()[slice_index].m_basis_bc1_luma_709_psnr,
 					params.m_quality_level, (int)params.m_compression_level, tm.get_elapsed_secs());
-				fflush(pCSV_file);
+				fflush(pCSV_file.get());
 			}
 		}
 				
@@ -802,12 +794,6 @@ static bool compress_mode(command_line_params &opts)
 
 	} // file_index
 
-	if (pCSV_file)
-	{
-		fclose(pCSV_file);
-		pCSV_file = nullptr;
-	}
-		
 	return true;
 }
 

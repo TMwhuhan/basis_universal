@@ -796,6 +796,14 @@ namespace basisu
 #endif
 	}
 
+	inline bool string_ends_with(const std::string& string, const std::string& ending) {
+		if (string.length() < ending.length()) {
+			return false;
+		}
+
+		return (0 == string.compare(string.length() - ending.length(), ending.length(), ending));
+	}
+
 	inline void string_combine_path(std::string &dst, const char *p, const char *q)
 	{
 		std::string temp(p);
@@ -2225,6 +2233,19 @@ namespace basisu
 
 			return *this;
 		}
+
+		inline uint32_t get_mip_count(uint32_t smallest_dimension = 1) const {
+			uint32_t w = get_width(), h = get_height();
+			uint32_t total_levels = 1;
+			while (maximum<uint32_t>(w, h) > (uint32_t)smallest_dimension)
+			{
+				w = maximum(w >> 1U, 1U);
+				h = maximum(h >> 1U, 1U);
+				total_levels++;
+			}
+			return total_levels;
+		}
+
 
 		inline const color_rgba &operator() (uint32_t x, uint32_t y) const { assert(x < m_width && y < m_height); return m_pixels[x + y * m_pitch]; }
 		inline color_rgba &operator() (uint32_t x, uint32_t y) { assert(x < m_width && y < m_height); return m_pixels[x + y * m_pitch]; }

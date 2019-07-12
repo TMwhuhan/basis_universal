@@ -66,6 +66,7 @@ target_include_directories(basisu_encoder
 		$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/${PROJECT_NAME}/>
         PRIVATE
         ${LODEPNG_INCLUDE}
+        ${PROJECT_SOURCE_DIR}/third-party/khrpp/include
 		)
 
 

@@ -304,7 +304,7 @@ namespace basisu
 	{
 		for (uint32_t s = 0; s < m_slices.size(); s++)
 		{
-			if ((int)m_slices[s].m_source_file_index != ((int)m_slices[slice_index].m_source_file_index + delta))
+			if ((int)m_slices[s].m_source_image_index != ((int)m_slices[slice_index].m_source_image_index + delta))
 				continue;
 			if (m_slices[s].m_mip_index != m_slices[slice_index].m_mip_index)
 				continue;

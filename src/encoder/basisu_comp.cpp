@@ -15,6 +15,8 @@
 #include "basisu_comp.h"
 #include "basisu_enc.h"
 #include <unordered_set>
+#include <khr/ktx.hpp>
+#include <khr/storage.hpp>
 
 #define BASISU_USE_STB_IMAGE_RESIZE_FOR_MIPMAP_GEN 0
 #define DEBUG_CROP_TEXTURE_TO_64x64 (0)
@@ -214,6 +216,192 @@ namespace basisu
 
 		return true;
 	}
+        
+	struct basis_ktx : std::enable_shared_from_this<basis_ktx> {
+		using pointer = std::shared_ptr<const basis_ktx>;
+
+		// There's a lot of failure conditions to deal with here without exception handling, so hide
+		// the logic in a constructor that can leave the object in a half-valid state and a separate 
+		// validity check, all wrapped up behind a static method to create a unique_ptr wrapper
+		static pointer open(const std::string& filename) {
+			pointer result{ new basis_ktx(filename) };
+
+			if (!result->ktx_data) {
+				return {};
+			}
+
+			if (!result) {
+				return {};
+			}
+
+			return result;
+		}
+
+		operator bool() const {
+			return !filename.empty() && ktx_data && ktx_descriptor.isValid();
+		}
+
+	private:
+		basis_ktx(const std::string source_filename) : filename(source_filename) {
+			const_cast<khronos::utils::Storage::ConstPointer&>(ktx_data) =  khronos::utils::Storage::readFile(filename);
+			if (!ktx_data) {
+				error_printf("Failed opening KTX file \"%s\"\n", filename.c_str());
+				return;
+			}
+
+			if (!khronos::ktx::KTXDescriptor::read(ktx_data->data(), ktx_data->size(), const_cast<khronos::ktx::KTXDescriptor&>(ktx_descriptor))) {
+				error_printf("Error parsing KTX file \"%s\"\n", filename.c_str());
+				return;
+			}
+		}
+
+	public:
+		const std::string filename;
+		const khronos::utils::Storage::ConstPointer ktx_data;
+		const khronos::ktx::KTXDescriptor ktx_descriptor;
+
+		static bool is_ktx_file(const std::string& filename) {
+			static const std::string KTX_EXTENSION = ".ktx";
+			return string_ends_with(filename, KTX_EXTENSION);
+		}
+
+		bool is_array() const { return ktx_descriptor.header.getNumberOfArrayElements() > 1; }
+
+		bool is_cubemap() const { return ktx_descriptor.header.numberOfFaces > 1; }
+
+		bool is_multi_image() const { return is_array() || is_cubemap(); }
+
+		bool read_sub_image(uint8_t mip, uint16_t level, uint8_t face, image& result) const {
+			auto offset = ktx_descriptor.getImageOffset(mip, level, face);
+			if (offset < 0) {
+				return false;
+			}
+
+			auto mip_width = ktx_descriptor.header.evalPixelOrBlockWidth(mip);
+			auto mip_height = ktx_descriptor.header.evalPixelOrBlockHeight(mip);
+			uint32_t pitch = static_cast<uint32_t>(ktx_descriptor.header.evalRowSize(mip));
+			result.resize(mip_width, mip_height, pitch);
+			// FIXME support inline conversion between SRGB and RGB 
+			for (uint32_t y = 0; y < mip_height; ++y) {
+				size_t line_offset = offset + (pitch * y);
+				auto& lineStart = result(0, y);
+				memcpy(&lineStart, ktx_data->data() + line_offset, pitch);
+			}
+			return true;
+		}
+
+	};
+
+
+		//bool read_top_images(basis_source_image::vector& result) const {
+		//}
+
+		//bool read_sub_image(uint8_t mip, uint16_t level, uint8_t face, basis_source_image& result) const {
+		//	return read_sub_image(mip, level, face, result.m_image);
+		//}
+
+	struct basis_source_image {
+		static const uint32_t INVALID_INDEX = UINT32_MAX;
+		using vector = std::vector<basis_source_image>;
+		static bool read_file(const std::string& filename, vector& result);
+		void load_available_mips(std::vector<image>& slices, uint32_t smallest_mip_dimension);
+		image m_image;
+		uint32_t m_source_file_index{ INVALID_INDEX };
+		std::string m_filename;
+		basis_ktx::pointer m_ktx;
+		uint32_t m_mip{ 0 };
+		uint32_t m_face{ 0 };
+		uint32_t m_array{ 0 };
+	};
+
+	bool basis_source_image::read_file(const std::string& filename, basis_source_image::vector& result) {
+		// KTX handling
+		if (basis_ktx::is_ktx_file(filename)) {
+			basis_ktx::pointer ktx = basis_ktx::open(filename);
+			if (!ktx) {
+				return false;
+			}
+			const auto& ktx_header = ktx->ktx_descriptor.header;
+			if (ktx_header.endianness == khronos::ktx::Header::REVERSE_ENDIAN_TEST) {
+				// FIXME deal with byte reversal
+				error_printf("Only KTX files with endianness matching the host OS are supported\n");
+				return false;
+			}
+			if (ktx_header.isCompressed()) {
+				error_printf("Conversion of compressed KTX files is not supported\n");
+				return false;
+			}
+			if (ktx_header.glInternalFormat != khronos::gl::texture::InternalFormat::RGBA8) {
+				// FIXME figure out how to deal with separate alpha source files
+				error_printf("Only RGBA8 KTX is currently supported\n");
+				return false;
+			}
+			if (ktx_header.pixelDepth > 1) {
+				// FIXME Figure out how to deal with cubemaps
+				error_printf("KTX 3D textures are not currently supported\n");
+				return false;
+			}
+
+			uint32_t level_count = ktx_header.getNumberOfArrayElements();
+			uint32_t face_count = ktx_header.numberOfFaces;
+			result.reserve(result.size() + (face_count * level_count));
+			for (uint32_t level = 0; level < level_count; ++level) {
+				for (uint32_t face = 0; face < face_count; ++face) {
+					result.push_back({});
+					auto& result_image = result.back();
+					result_image.m_array = level;
+					result_image.m_face = face;
+					result_image.m_filename = filename;
+					result_image.m_ktx = ktx;
+					if (!ktx->read_sub_image(0, level, face, result_image.m_image)) {
+						result.pop_back();
+						return false;
+					}
+				}
+			}
+
+			return true;
+		}
+
+		// FIXME add DDS handling?
+		
+		// Fallback to PNG handling by default
+		result.push_back({});
+		auto& source_image = result.back();
+		if (!load_png(filename.c_str(), source_image.m_image)) {
+			result.pop_back();
+			return false;
+		}
+
+		return true;
+	}
+
+	void basis_source_image::load_available_mips(std::vector<image>& slices, uint32_t smallest_mip_dimension) {
+		// These debug modes are incompatible with loading KTX based mips
+#if DEBUG_EXTRACT_SINGLE_BLOCK || DEBUG_CROP_TEXTURE_TO_64x64 || DEBUG_RESIZE_TEXTURE
+		return;
+#endif
+
+		if (!m_ktx) {
+			return;
+		}
+		const auto& root_image = slices[0];
+		uint32_t target_level_count = root_image.get_mip_count(smallest_mip_dimension);
+		const auto& ktx_header = m_ktx->ktx_descriptor.header;
+		// If the KTX has an incomplete pyramid or fewer mips than we're looking for, don't load
+		// FIXME emit warning?
+		if (ktx_header.getNumberOfMips() < target_level_count) {
+			return;
+		}
+
+		for (uint32_t mip = 1; mip < target_level_count; ++mip) {
+			slices.push_back({});
+			if (!m_ktx->read_sub_image(mip, m_array, m_face, slices.back())) {
+				slices.pop_back();
+				return;
+			}
+		}
+	}
 
 	bool basis_compressor::read_source_images()
 	{
@@ -232,128 +420,151 @@ namespace basisu
 
 		m_any_source_image_has_alpha = false;
 
-		std::vector<image> source_images;
-		std::vector<std::string> source_filenames;
+		basis_source_image::vector source_images;
 		
 		// First load all source images, and determine if any have an alpha channel.
 		for (uint32_t source_file_index = 0; source_file_index < total_source_files; source_file_index++)
 		{
-			const char *pSource_filename = "";
-
-			image file_image;
-			
+			basis_source_image::vector file_images;
 			if (m_params.m_read_source_images)
 			{
-				pSource_filename = m_params.m_source_filenames[source_file_index].c_str();
-
+				const auto& source_filename = m_params.m_source_filenames[source_file_index];
 				// Load the source image
-				if (!load_png(pSource_filename, file_image))
+				if (!basis_source_image::read_file(source_filename, file_images))
 				{
-					error_printf("Failed reading source image: %s\n", pSource_filename);
+					error_printf("Failed reading source image: %s\n", source_filename.c_str());
 					return false;
 				}
 
-				printf("Read source image \"%s\", %ux%u\n", pSource_filename, file_image.get_width(), file_image.get_height());
+				for (auto& file_image : file_images) {
+					file_image.m_source_file_index = source_file_index;
+					if (file_image.m_ktx && file_image.m_ktx->is_cubemap() && m_params.m_tex_type != basist::cBASISTexTypeCubemapArray) {
+						error_printf("Source image %s is a cubemap, forcing output to be cubemap\n", source_filename.c_str());
+						m_params.m_tex_type = basist::cBASISTexTypeCubemapArray;
+						break;
+					}
+				}
+
+				auto& file_image = file_images.back().m_image;
+				printf("Read source image \"%s\", %ux%u\n", source_filename.c_str(), file_image.get_width(), file_image.get_height());
 
 				// Optionally load another image and put a grayscale version of it into the alpha channel.
+				// The number of alpha images drawn from a given file MUST MATCH the number of corresponding 
+				// RGB images, if loading from a multi-image file format (KTX / DDS)
 				if ((source_file_index < m_params.m_source_alpha_filenames.size()) && (m_params.m_source_alpha_filenames[source_file_index].size()))
 				{
-					const char *pSource_alpha_image = m_params.m_source_alpha_filenames[source_file_index].c_str();
+					const auto& source_alpha_filename = m_params.m_source_alpha_filenames[source_file_index];
+					const char *pSource_alpha_image = source_alpha_filename.c_str();
 
-					image alpha_data;
-
-					if (!load_png(pSource_alpha_image, alpha_data))
+					basis_source_image::vector alpha_sources;
+					if (!basis_source_image::read_file(source_alpha_filename, alpha_sources))
 					{
 						error_printf("Failed reading source image: %s\n", pSource_alpha_image);
 						return false;
 					}
 
-					printf("Read source alpha image \"%s\", %ux%u\n", pSource_alpha_image, alpha_data.get_width(), alpha_data.get_height());
+					if (alpha_sources.size() != file_images.size()) {
+						error_printf("Number of alpha images does not match number of RGB images\n");
+                        return false;
+					}
 
-					alpha_data.crop(file_image.get_width(), file_image.get_height());
+					printf("Read source alpha image \"%s\", %ux%u\n", pSource_alpha_image, alpha_sources.back().m_image.get_width(), alpha_sources.back().m_image.get_height());
+					size_t file_image_count = file_images.size();
+					for (size_t i = 0; i < file_image_count; ++i) {
+						auto& alpha_data = alpha_sources[i].m_image;
+						auto& file_image = file_images[i].m_image;
+						alpha_data.crop(file_image.get_width(), file_image.get_height());
 
-					for (uint32_t y = 0; y < file_image.get_height(); y++)
-						for (uint32_t x = 0; x < file_image.get_width(); x++)
-							file_image(x, y).a = (uint8_t)alpha_data(x, y).get_709_luma();
+						for (uint32_t y = 0; y < file_image.get_height(); y++)
+							for (uint32_t x = 0; x < file_image.get_width(); x++)
+								file_image(x, y).a = (uint8_t)alpha_data(x, y).get_709_luma();
+					}
 				}
 			}
 			else
 			{
-				file_image = m_params.m_source_images[source_file_index];
+				file_images.push_back({});
+				file_images.back().m_image = m_params.m_source_images[source_file_index];
 			}
 
-			if (m_params.m_seperate_rg_to_color_alpha)
-			{
-				// Used for XY normal maps in RG - puts X in color, Y in alpha
-				for (uint32_t y = 0; y < file_image.get_height(); y++)
-					for (uint32_t x = 0; x < file_image.get_width(); x++)
-					{
-						const color_rgba &c = file_image(x, y);
-						file_image(x, y).set_noclamp_rgba(c.r, c.r, c.r, c.g);
-					}
-			}
+			for (auto& file_source_image : file_images) {
+				auto& file_image = file_source_image.m_image;
+				if (m_params.m_seperate_rg_to_color_alpha)
+				{
+					// Used for XY normal maps in RG - puts X in color, Y in alpha
+					for (uint32_t y = 0; y < file_image.get_height(); y++)
+						for (uint32_t x = 0; x < file_image.get_width(); x++)
+						{
+							const color_rgba &c = file_image(x, y);
+							file_image(x, y).set_noclamp_rgba(c.r, c.r, c.r, c.g);
+						}
+				}
 						
-			bool has_alpha = false;
-			if ((m_params.m_force_alpha) || (m_params.m_seperate_rg_to_color_alpha))
-				has_alpha = true;
-			else if (!m_params.m_check_for_alpha)
-				file_image.set_alpha(255);
-			else if (file_image.has_alpha())
-				has_alpha = true;
+				bool has_alpha = false;
+				if ((m_params.m_force_alpha) || (m_params.m_seperate_rg_to_color_alpha))
+					has_alpha = true;
+				else if (!m_params.m_check_for_alpha)
+					file_image.set_alpha(255);
+				else if (file_image.has_alpha())
+					has_alpha = true;
 
-			if (has_alpha)
-				m_any_source_image_has_alpha = true;
+				if (has_alpha)
+					m_any_source_image_has_alpha = true;
 
-			debug_printf("Source image index %u filename %s %ux%u has alpha: %u\n", source_file_index, pSource_filename, file_image.get_width(), file_image.get_height(), has_alpha);
+				debug_printf("Source image filename %s %ux%u has alpha: %u\n", file_source_image.m_filename.c_str(), file_image.get_width(), file_image.get_height(), has_alpha);
 												
-			if (m_params.m_y_flip)
-				file_image.flip_y();
+				if (m_params.m_y_flip)
+					file_image.flip_y();
 
-#if DEBUG_EXTRACT_SINGLE_BLOCK
-			image block_image(4, 4);
-			const uint32_t block_x = 0;
-			const uint32_t block_y = 0;
-			block_image.blit(block_x * 4, block_y * 4, 4, 4, 0, 0, file_image, 0);
-			file_image = block_image;
-#endif
+		#if DEBUG_EXTRACT_SINGLE_BLOCK
+				image block_image(4, 4);
+				const uint32_t block_x = 0;
+				const uint32_t block_y = 0;
+				block_image.blit(block_x * 4, block_y * 4, 4, 4, 0, 0, file_image, 0);
+				file_image = block_image;
+		#endif
 
-#if DEBUG_CROP_TEXTURE_TO_64x64
-			file_image.resize(64, 64);
-#endif
-#if DEBUG_RESIZE_TEXTURE
-			image temp_img((file_image.get_width() + 1) / 2, (file_image.get_height() + 1) / 2);
-			image_resample(file_image, temp_img, m_params.m_perceptual, "kaiser");
-			temp_img.swap(file_image);
-#endif
+		#if DEBUG_CROP_TEXTURE_TO_64x64
+				file_image.resize(64, 64);
+		#endif
+		#if DEBUG_RESIZE_TEXTURE
+				image temp_img((file_image.get_width() + 1) / 2, (file_image.get_height() + 1) / 2);
+				image_resample(file_image, temp_img, m_params.m_perceptual, "kaiser");
+				temp_img.swap(file_image);
+		#endif
 
-			if ((!file_image.get_width()) || (!file_image.get_height()))
-			{
-				error_printf("basis_compressor::read_source_images: Source image has a zero width and/or height!\n");
-				return false;
+				if ((!file_image.get_width()) || (!file_image.get_height()))
+				{
+					error_printf("basis_compressor::read_source_images: Source image has a zero width and/or height!\n");
+					return false;
+				}
+
+				if ((file_image.get_width() > BASISU_MAX_SUPPORTED_TEXTURE_DIMENSION) || (file_image.get_height() > BASISU_MAX_SUPPORTED_TEXTURE_DIMENSION))
+				{
+					error_printf("basis_compressor::read_source_images: Source image is too large!\n");
+					return false;
+				}
 			}
 
-			if ((file_image.get_width() > BASISU_MAX_SUPPORTED_TEXTURE_DIMENSION) || (file_image.get_height() > BASISU_MAX_SUPPORTED_TEXTURE_DIMENSION))
-			{
-				error_printf("basis_compressor::read_source_images: Source image is too large!\n");
-				return false;
-			}
-
-			source_images.push_back(file_image);
-			source_filenames.push_back(pSource_filename);
+			source_images.insert(std::end(source_images), std::begin(file_images), std::end(file_images));
 		}
 
 		debug_printf("Any source image has alpha: %u\n", m_any_source_image_has_alpha);
 
-		for (uint32_t source_file_index = 0; source_file_index < total_source_files; source_file_index++)
-		{
-			image &file_image = source_images[source_file_index];
-			const std::string &source_filename = source_filenames[source_file_index];
+		auto source_image_count = source_images.size();
+		for (size_t source_image_index = 0; source_image_index < source_image_count; ++source_image_index) {
+			auto& source_image = source_images[source_image_index];
+			auto& file_image = source_image.m_image;
+			auto& source_filename = source_image.m_filename;
+			auto& source_file_index = source_image.m_source_file_index;
 
 			std::vector<image> slices;
-			
+
 			slices.reserve(32);
 			slices.push_back(file_image);
-									
+
+			source_image.load_available_mips(slices, m_params.m_mip_smallest_dimension);
+
 			if (m_params.m_mip_gen)
 			{
 				if (!generate_mipmaps(file_image, slices, m_any_source_image_has_alpha))
@@ -414,7 +625,9 @@ namespace basisu
 
 				if (m_params.m_debug_images)
 				{
-					save_png(string_format("basis_debug_source_image_%u_%u.png", source_file_index, slice_index).c_str(), slice_image);
+					// source_file_index is actually an encoded combination of the real source file index in the top 16 bits, 
+					// with the face and array indices encoded in the next 16 bits
+					save_png(string_format("basis_debug_source_image_%u_f%u_a%u_%u.png", source_image.m_source_file_index, source_image.m_face, source_image.m_array, slice_index).c_str(), slice_image);
 				}
 
 				enlarge_vector(m_stats, 1);
@@ -447,7 +660,8 @@ namespace basisu
 				slice_desc.m_num_macroblocks_x = (slice_desc.m_num_blocks_x + 1) >> 1;
 				slice_desc.m_num_macroblocks_y = (slice_desc.m_num_blocks_y + 1) >> 1;
 
-				slice_desc.m_source_file_index = source_file_index;
+				slice_desc.m_source_file_index = source_image.m_source_file_index;
+				slice_desc.m_source_image_index = (uint32_t)source_image_index;
 				
 				slice_desc.m_mip_index = mip_indices[slice_index];
 
@@ -481,7 +695,7 @@ namespace basisu
 			const basisu_backend_slice_desc &slice_desc = m_slice_descs[i];
 
 			// Make sure images are in order
-			int image_delta = (int)slice_desc.m_source_file_index - (int)prev_slice_desc.m_source_file_index;
+			int image_delta = (int)slice_desc.m_source_image_index - (int)prev_slice_desc.m_source_image_index;
 			if (image_delta > 1)
 				return false;	
 
@@ -501,7 +715,7 @@ namespace basisu
 			const basisu_backend_slice_desc &slice_desc = m_slice_descs[i];
 
 			printf("Slice: %u, alpha: %u, orig width/height: %ux%u, width/height: %ux%u, first_block: %u, image_index: %u, mip_level: %u, iframe: %u\n", 
-				i, slice_desc.m_alpha, slice_desc.m_orig_width, slice_desc.m_orig_height, slice_desc.m_width, slice_desc.m_height, slice_desc.m_first_block_index, slice_desc.m_source_file_index, slice_desc.m_mip_index, slice_desc.m_iframe);
+				i, slice_desc.m_alpha, slice_desc.m_orig_width, slice_desc.m_orig_height, slice_desc.m_width, slice_desc.m_height, slice_desc.m_first_block_index, slice_desc.m_source_image_index, slice_desc.m_mip_index, slice_desc.m_iframe);
 
 			if (m_any_source_image_has_alpha)
 			{
@@ -514,7 +728,7 @@ namespace basisu
 					const basisu_backend_slice_desc &prev_slice_desc = m_slice_descs[i - 1];
 
 					// Make sure previous slice has this image's color data
-					if (prev_slice_desc.m_source_file_index != slice_desc.m_source_file_index)
+					if (prev_slice_desc.m_source_image_index != slice_desc.m_source_image_index)
 						return false;
 					if (prev_slice_desc.m_alpha)
 						return false;
@@ -535,7 +749,7 @@ namespace basisu
 
 			if ((slice_desc.m_orig_width > slice_desc.m_width) || (slice_desc.m_orig_height > slice_desc.m_height))
 				return false;
-			if ((slice_desc.m_source_file_index == 0) && (m_params.m_tex_type == basist::cBASISTexTypeVideoFrames))
+			if ((slice_desc.m_source_image_index == 0) && (m_params.m_tex_type == basist::cBASISTexTypeVideoFrames))
 			{
 				if (!slice_desc.m_iframe)
 					return false;
@@ -560,7 +774,7 @@ namespace basisu
 		{
 			const basisu_backend_slice_desc &slice_desc = m_slice_descs[slice_index];
 				
-			total_basis_images = maximum<uint32_t>(total_basis_images, slice_desc.m_source_file_index + 1);
+			total_basis_images = maximum<uint32_t>(total_basis_images, slice_desc.m_source_image_index + 1);
 		}
 
 		if (m_params.m_tex_type == basist::cBASISTexTypeCubemapArray)
@@ -581,7 +795,7 @@ namespace basisu
 		{
 			const basisu_backend_slice_desc &slice_desc = m_slice_descs[slice_index];
 
-			image_mipmap_levels[slice_desc.m_source_file_index] = maximum(image_mipmap_levels[slice_desc.m_source_file_index], slice_desc.m_mip_index + 1);
+			image_mipmap_levels[slice_desc.m_source_image_index] = maximum(image_mipmap_levels[slice_desc.m_source_image_index], slice_desc.m_mip_index + 1);
 				
 			if (slice_desc.m_mip_index != 0)
 				continue;
