@@ -19,9 +19,12 @@
 #pragma warning (disable : 4201)
 #pragma warning (disable : 4127) // warning C4127: conditional expression is constant
 #pragma warning (disable : 4530) // C++ exception handler used, but unwind semantics are not enabled.
-#if defined(BASISU_ITERATOR_DEBUG) && (defined(_DEBUG) || defined(DEBUG))
+#ifndef BASISU_NO_ITERATOR_DEBUG_LEVEL
+//#define _HAS_ITERATOR_DEBUGGING 0
+#if defined(_DEBUG) || defined(DEBUG)
 #define _ITERATOR_DEBUG_LEVEL 1
 #define _SECURE_SCL 1
+#endif
 #endif
 #ifndef NOMINMAX
 	#define NOMINMAX
