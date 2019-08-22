@@ -21,6 +21,8 @@ find_package(Threads REQUIRED)
 
 if (BASISU_ITERATOR_DEBUG)
     add_definitions(-DBASISU_ITERATOR_DEBUG)
+else()
+    add_definitions(-DBASISU_NO_ITERATOR_DEBUG_LEVEL)
 endif()
 
 add_subdirectory(src)
