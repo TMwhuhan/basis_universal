@@ -19,7 +19,11 @@
 #include <lodepng.h>
 #include <transcoder/basisu_transcoder.h>
 
+
 #if defined(_WIN32)
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
 // For QueryPerformanceCounter/QueryPerformanceFrequency
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>

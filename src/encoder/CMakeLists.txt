@@ -21,6 +21,7 @@ target_sources(basisu_encoder
 		basisu_backend.h
 		basisu_basis_file.h
 		basisu_comp.h
+		basisu_astc_decomp.h
 		basisu_enc.h
 		basisu_etc.h
 		basisu_frontend.h
@@ -32,6 +33,7 @@ target_sources(basisu_encoder
 		basisu_backend.cpp
 		basisu_basis_file.cpp
 		basisu_comp.cpp
+		basisu_astc_decomp.cpp
 		basisu_enc.cpp
 		basisu_etc.cpp
 		basisu_frontend.cpp

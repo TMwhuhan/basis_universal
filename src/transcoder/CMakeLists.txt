@@ -19,6 +19,7 @@ set_target_properties(basisu_transcoder PROPERTIES
 target_include_directories(basisu_transcoder
 		PUBLIC
 		# Helps the includes find what they need at runtime
+		${PROJECT_SOURCE_DIR}/transcoder
 		$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/${PROJECT_NAME}/transcoder>
 		)
 
