@@ -8,8 +8,8 @@ if(EMSCRIPTEN)
     ../../basisu/transcoder/basisu_transcoder.cpp
     basis_wrappers.cpp
   )
-	
-  target_compile_definitions(basis_transcoder.js PRIVATE NDEBUG BASISD_SUPPORT_BC7=0)
+
+  target_compile_definitions(basis_transcoder.js PRIVATE NDEBUG BASISD_SUPPORT_BC7=0 BASISD_SUPPORT_ATC=0 BASISD_SUPPORT_ASTC_HIGHER_OPAQUE_QUALITY=0)
   target_compile_options(basis_transcoder.js PRIVATE -O3)
   target_include_directories(basis_transcoder.js PRIVATE ../../basisu/transcoder)
 	
