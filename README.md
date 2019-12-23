@@ -1,7 +1,7 @@
 # basis_universal
 Basis Universal GPU Texture and Texture Video Compression Codec
 
-Basis Universal is a ["supercompressed"](http://gamma.cs.unc.edu/GST/gst.pdf) compressed GPU texture and [compressed texture video](http://gamma.cs.unc.edu/MPTC/) compression system that outputs a highly compressed intermediate file format (.basis) that can be quickly transcoded to a very wide variety of GPU compressed and uncompressed pixel formats: ASTC 4x4 L/LA/RGB/RGBA, PVRTC1 4bpp RGB/RGBA, BC7 mode 6 RGB, BC7 mode 5 RGB/RGBA, BC1-5 RGB/RGBA/X/XY, ETC1 RGB, ETC2 RGBA, ATC RGB/RGBA, and uncompressed raster image formats 8888/565/4444.
+Basis Universal is a ["supercompressed"](http://gamma.cs.unc.edu/GST/gst.pdf) compressed GPU texture and [compressed texture video](http://gamma.cs.unc.edu/MPTC/) compression system that outputs a highly compressed intermediate file format (.basis) that can be quickly transcoded to a [very wide variety](https://github.com/BinomialLLC/basis_universal/wiki/OpenGL-texture-format-enums-table) of GPU compressed and uncompressed pixel formats: ASTC 4x4 L/LA/RGB/RGBA, PVRTC1 4bpp RGB/RGBA, PVRTC2 RGB/RGBA, BC7 mode 6 RGB, BC7 mode 5 RGB/RGBA, BC1-5 RGB/RGBA/X/XY, ETC1 RGB, ETC2 RGBA, ATC RGB/RGBA, ETC2 EAC R11 and RG11, FXT1 RGB, and uncompressed raster image formats 8888/565/4444. 
 
 Basis files support non-uniform texture arrays, so cubemaps, volume textures, texture arrays, mipmap levels, video sequences, or arbitrary texture "tiles" can be stored in a single file. The compressor is able to exploit color and pattern correlations across the entire file, so multiple images with mipmaps can be stored very efficiently in a single file.
 
@@ -21,9 +21,42 @@ The encoder uses [lodepng](https://lodev.org/lodepng/) for loading and saving PN
 
 The encoder uses [tcuAstcUtil.cpp](https://chromium.googlesource.com/external/deqp/+/refs/heads/master/framework/common/tcuAstcUtil.cpp), from the [Android drawElements Quality Program (deqp) Testing Suite](https://source.android.com/devices/graphics/deqp-testing), for unpacking the transcoder's ASTC output for testing/validation purposes. This code is Copyright 2016 The Android Open Source Project, and uses the Apache 2.0 license. We have modified the code so it has no external dependencies, and disabled HDR support.
 
+### Legal/IP/license stuff
+
+Basis Universal uses texture compression formats or technologies created by several companies: ARM Holdings, AMD, Ericsson, Microsoft, and Imagination Technologies Limited. All are supported by various open standards or API's from [The Khronos Group](https://www.khronos.org/), such as OpenGL 4.5, OpenGL ES, or Vulkan. 
+
+A few texture formats (such as AMD/ATI's ATC texture format, or PVRTC2) were not documented sufficiently by the originator of the format. In these cases, we relied on open source code references from other authors, or information in published articles/papers to implement support for those texture formats in our transcoder. These references are included here.
+
+ASTC usage falls under ARM's [END USER LICENCE AGREEMENT FOR THE MALI ASTC SPECIFICATION AND SOFTWARE CODEC license agreement](https://github.com/ARM-software/astc-encoder/blob/master/LICENSE.md). 
+
+PVRTC1/2: See the [PVRTC Specification and User Guide](https://www.imgtec.com/downloads/download-info/pvrtc-texture-compression-user-guide-2/). Imagination Technologies Limited, 23 Nov 2018. Also see the [Khronos Data Format Specification](https://www.khronos.org/registry/DataFormat/specs/1.1/dataformat.1.1.html). See [PVR Texture Compression Exploration](https://roartindon.blogspot.com/2014/08/pvr-texture-compression-exploration.html) and [PvrTcCompressor](https://bitbucket.org/jthlim/pvrtccompressor/src). Also see [Texture Compression Techniques](http://sv-journal.org/2014-1/06/en/index.php?lang=en#7-3).
+
+ETC1 and ETC2 EAC: See the [Khronos Data Format Specification](https://www.khronos.org/registry/DataFormat/specs/1.1/dataformat.1.1.html) and the [OpenGL 4.5 Core Profile](https://www.khronos.org/registry/OpenGL/specs/gl/glspec45.core.pdf) Appendix C.
+
+BC1-5,7: Part of Microsoft's Direct3D API technology. See [Texture Block Compression in Direct3D 11](https://docs.microsoft.com/en-us/windows/win32/direct3d11/texture-block-compression-in-direct3d-11). Also see the [squish library](https://github.com/Ethatron/squish-ccr).
+
+ATC: See the OpenGL extension [GL_AMD_compressed_ATC_texture](https://www.khronos.org/registry/OpenGL/extensions/AMD/AMD_compressed_ATC_texture.txt). For low-level ATC texture format information, see [S3TConv](https://github.com/Triang3l/S3TConv) and the paper [A Method for Load-Time Conversion of DXTC Assets to ATC](http://www.guildsoftware.com/papers/2012.Converting.DXTC.to.ATC.pdf).
+
+FXT1: See the OpenGL extension [GL_3DFX_texture_compression_FXT1](https://www.khronos.org/registry/OpenGL/extensions/3DFX/3DFX_texture_compression_FXT1.txt).
+
+Also see [Intel® Open Source HD Graphics Programmers' Reference Manual (PRM)](https://01.org/sites/default/files/documentation/intel-gfx-bspec-osrc-chv-bsw-vol05-memory-views.pdf). This reference manual details how to encode FXT1, ETC1, ETC2, EAC, DXT/BC1-3, BC4/5/7, and ASTC.
+
 ### Release notes
 
-Milestone 2 (9/19/16) release notes:
+9/26/19 release notes:
+- Automatic global selector palettes are disabled by default, because searching the virtual selector codebook is very slow.
+You can enable them by specifying -auto_global_sel_pal on the command line, for slightly smaller files on small textures/images.
+- PVRTC2 RGB support added. This format looks great and transcoding is fast - approximately as good as BC1. It supports non-power of 2, non-square textures, and should be used instead of PVRTC1 whenever possible.
+- PVRTC2 RGBA support added. This format looks OK if the texture has a very simple alpha channel (like simple opacity mask). The texture should use premulitplied alpha, otherwise on alpha=0 pixels the color channel may slightly leak into the alpha channel due to issues with the PVRTC2 format itself. Transcoding is fast unless the texture's alpha channel is very complex.
+It's a tossup whether PVRTC1 or PVRTC2 would look better for alpha textures. 
+- ETC2 EAC R11/RG11 (unsigned) support checked in. Thanks to Juan Linietsky for suggesting it.
+- The format enum names have changed, but I tried to keep compatibility with old code. The actual values haven't changed so Javascript code should work without modifications. 
+- We're now using "enum class transcoder_texture_format" instead of "enum transcoder_texture_format" in basisu_transcoder.h
+- Fixed a couple encoder bugs (one assert in basisu_enc.h), and a uninitialized variable issue in the frontend. Neither issue would cause corrupted files or artifacts.
+- FXT1 RGB support is checked in, for Intel/3DFX GPU's. Mostly for completeness and to test block sizes other than 4x4.
+- The PVRTC1 wrap vs. clamp flag has been removed from the entire codebase, because PVRTC1 always uses wrap addressing when fetching the adjacent blocks (even when the user selects clamp UV addressing).
+
+Milestone 2 (9/19/19) release notes:
 
 - **Beware that the "transcoder_texture_format" enum names and their values are in flux** as we add new texture formats.
 This issue particularly affects Javascript code. Passing the old enum values to the transcoder will cause bugs. 
@@ -173,6 +206,22 @@ So if you compile and ship the transcoder into an application today, we are maki
 
 Note: The one exception to this promise are .basis textures marked as video. We will be changing how a key symbol is interpreted to introduce skip blocks (conditional replenishment) into the system.
 
+### Encoder speed
+
+Total time for basisu.exe to compress a 1024x1024 texture on a 7 year old 4-core 2.2GHz Core i7 laptop - timings are "without mipmaps/with mipmaps":
+
+* -comp_level 0: 
+
+-q 128: 2.2/3.5 secs
+
+-q 255: 1.5/2.5 secs
+
+* -comp_level 1:
+
+-q 128: 4.1/6.2 secs
+
+-q 255: 6.4/9.4 secs
+
 ### Transcoder details
 
 The transcoder unpacks .basis files directly to various GPU texture formats, almost always without needing to decompress and recompress each block at the pixel level (which would be too slow and energy intensive in Javascript/WebAssembly). Small precomputed lookup tables are used to accelerate the direct conversion of the internal ETC1S format texture data to the desired output texture data. This new approach to GPU texture compression bypasses the need to recompress each block's pixels to the desired output format using Principle Component Anaylsis (PCA), or spend cycles determining the output selectors for each individual pixel. The ETC1S texture format is a strong subset of all the other block texture formats. The one exception is PVRTC1, where the transcoder needs to recompute the per-pixel selector ("modulation") values, but it does so using simple scalar operations.
@@ -205,6 +254,9 @@ These transcoder macros control which formats are supported by the transcoder at
 - BASISD_SUPPORT_ASTC
 - BASISD_SUPPORT_ATC
 - BASISD_SUPPORT_ASTC_HIGHER_OPAQUE_QUALITY
+- BASISD_SUPPORT_ETC2_EAC_RG11
+- BASISD_SUPPORT_FXT1
+- BASISD_SUPPORT_PVRTC2
 
 Each format requires its own set of precomputed ETC1S conversion tables. Disabling a format that you know will never be utilized will reduce the compiled size of the transcoder. 
 
@@ -227,6 +279,8 @@ We currently only support CPU transcoding, but GPU assisted transcoding/format c
 I'm going to provide a simple C-style API to call the encoder directly. For now, you can call the C++ interface in basisu_comp.cpp/.h. See struct basis_compressor_params and class basis_compressor. Almost the entire command line tool's functionality is in basis_compressor. This class supports 100% in-memory compression with no file I/O.
 
 ### GPU texture format support details
+
+Here's a [table](https://github.com/BinomialLLC/basis_universal/wiki/OpenGL-texture-format-enums-table) showing the supported compressed texture formats and their corresponding OpenGL texture formats.
 
 Internally, all ETC1S slices can be converted to any format, and the system is very flexible. The transcoder's image API supports converting alpha slices to color texture formats, which allows the user to transcode textures with alpha to two ETC1 images, etc.
 
@@ -263,13 +317,17 @@ Note that for PVRTC1, the transcoder differs slightly in how it computes the mem
        
 When you call the transcoder and pass it a buffer that's larger than required, these extra padding bytes will be set to 0.
 
-PVRTC2 RGB (and maybe RGBA) support is coming soon, which is available on some Android platforms.
+PVRTC2 RGB - Fast and almost as high quality as BC1. It supports non-square, non-power of 2 textures.
 
-ASTC 4x4: The ASTC transcoder supports void extent (constant color) blocks and several different endpoint precision modes and encodings: L, LA, RGB or RGBA. To shrink the compiled size of the ASTC transcoder, set BASISD_SUPPORT_ASTC_HIGHER_OPAQUE_QUALITY to 0, which lowers endpoint precision slightly.
+PVRTC2 RGBA - This format is slower and much more complex than PVRTC2 RGB. It will only work well with textures using premultiplied alpha. The alpha channel should be relatively simple (like opacity maps).
+
+ETC2 EAC R11/RG11 - R11 is roughly equivalent to BC4, and RG11 is like BC5. Transcoding is very fast and high quality.
+
+ASTC 4x4 - The ASTC transcoder supports void extent (constant color) blocks and several different endpoint precision modes and encodings: L, LA, RGB or RGBA. To shrink the compiled size of the ASTC transcoder, set BASISD_SUPPORT_ASTC_HIGHER_OPAQUE_QUALITY to 0, which lowers endpoint precision slightly.
 
 Note the ASTC transcoder assumes sRGB sampling won't be enabled when sampling the ASTC texture data. (ASTC decompression works slightly differently when sRGB reads are enabled vs. disabled.) Enabling sRGB reads will result in a tiny amount of higher error that is unlikely to be noticeable. This was a conscious decision we had to make because we could only afford to include one set of precomputed ETC1S->ASTC conversion tables into the transcoder. We may put in two tables into the next transcoder release and let the user decide what they want at compile and/or run-time.
 
-ATI ATC: There are two transcoders, one for RGB (which is similar to BC1), and one for RGBA_INTERPOLATED_ALPHA (which is basically a BC4 block followed by an ATC block). This format is only useful on Adreno GPU's, so to cut down on the transcoder's size you can set BASISD_SUPPORT_ATC to 0 at compilation time if you know you'll never need ATC data. Quality is very similar to BC1/BC3.
+ATI ATC - There are two transcoders, one for RGB (which is similar to BC1), and one for RGBA_INTERPOLATED_ALPHA (which is basically a BC4 block followed by an ATC block). This format is only useful on Adreno GPU's, so to cut down on the transcoder's size you can set BASISD_SUPPORT_ATC to 0 at compilation time if you know you'll never need ATC data. Quality is very similar to BC1/BC3.
 
 RGB565, BGR564, ARGB 8888 and ARGB 4444 - Various uncompressed raw pixel formats. Internally the transcoder directly converts the ETC1S endpoint/selector data directly to uncompressed pixels. The output buffer is treated as a plain raster image, not as a 2D array of blocks. No dithering or downsampling is supported yet.
 
@@ -285,7 +343,7 @@ ETC2 EAC RGBA and ASTC work around these issues, but these formats are still not
 
 Here are the major texturing scenarios the system supports:
 
-1. For color-only textures, you can transcode to whatever format your target device supports. Remember that PVRTC1 requires square power of 2 size textures, and there's nothing Basis can currently do to help you work around this limitation. (Basic supports non-square PVRTC1 textures, but iOS doesn't.) 
+1. For color-only textures, you can transcode to whatever format your target device supports. Remember that PVRTC1 requires square power of 2 size textures, and there's nothing Basis can currently do to help you work around this limitation. (Basic supports non-square PVRTC1 textures, but iOS doesn't.) For devices which support both ASTC and PVRTC1, ASTC will be much higher quality. For devices supporting both PVRTC2 and ASTC, for most opaque textures you can probably use PVRTC2 which will conserve memory.
 
 2. For alpha textures, you can create .basis files with alpha channels. To do this with the basisu compressor, either create 32-bit PNG files with alpha, or use two PNG files with the "-alpha_file" command line option to specify where the alpha data should come from. (For texture arrays, you can use multiple -file and -alpha_file command line options. Mipmap generation automatically supports alpha channels.) 
 
@@ -301,9 +359,11 @@ Devices/API's supporting only BC1-5: Use BC3, which the transcoder supports. BC3
 
 Newer devices supporting BC7: Transcode to BC7 mode 5, which supports a high-quality alpha channel. Quality will be similar to BC3.
 
-Devices/API's supporting ASTC: Just transcode to ASTC, which supports a variety of internal block encodings that will be automatically chosen by the transcoder for every block: L, LA, RGB, RGBA.
+Devices/API's supporting ASTC: Just transcode to ASTC, which supports a variety of internal block encodings that will be automatically chosen by the transcoder for every block: L, LA, RGB, RGBA. If the device supports both PVRTC1/2 and ASTC, ASTC 4x4 will give you more reliable and much higher quality than PVRTC1/2, but it uses up twice as much RAM (8bpp vs 4bpp).
 
 Device's/API's supprting ATC: Transcode to ATC_RGBA_INTERPOLATED_ALPHA. This format is basically equivalent to BC3.
+
+Device's/API's supporting PVRTC2: The real-time PVRTC2 RGBA transcoder can only handle simple opacity maps. You'll need to experiment to see if it's high enough quality. For devices which support both PVRTC2 and ASTC, ASTC 4x4 is preferable for alpha content although it will require 2x as much memory.
 
 3. For high quality tangent space normal maps, here's one suggested solution that should work well today:
 
@@ -313,13 +373,13 @@ Start with 2 component normalized XY tangent space normal maps (where XY range f
 
 ETC1 only devices/API's: Transcode to two ETC1 textures and sample them in a shader, or use an uncompressed format. You can either use one ETC1 texture that's twice as high/wide, or two separate ETC1 textures. The transcoder supports transcoding alpha slices to any color output format using a special flag: `basist::basisu_transcoder::cDecodeFlagsTranscodeAlphaDataToOpaqueFormats`. This will look great because each channel gets its own endpoints and selectors.
 
-ETC2 devices/API's: Transcode to a single ETC2 EAC RGBA texture, sample once in shader, deswizzle to RG (XY). This should look great.
+ETC2 devices/API's: Transcode to a single ETC2 EAC RGBA or a ETC2 EAC RG11 texture, sample once in shader. This should look great.
 
 PVRTC1 devices/API's: Transcode to two PVRTC1 opaque textures (RGB to one, A to another, which the transcoder supports using the cDecodeFlagsTranscodeAlphaDataToOpaqueFormats flag) and sample each in the shader. This should look fairly good. Its doubtful the PVRTC1 RGBA transcoder could handle two complex channels of data well.
 
 Devices/API's supporting BC1-5, BC6H, BC7: Transcode to a single BC5 textures, which used to be called "ATI 3DC". It has two high quality BC4 blocks in there, so it'll look great. You could also use BC7 mode 5, although BC5 will have slightly less error.
 
-Devices/API's supporting ASTC: Just transcode to ASTC. The block transcoder will automatically encode to the "LA" format.
+Devices/API's supporting ASTC: Just transcode to ASTC. The block transcoder will automatically encode to the "LA" format. 
 
 ### Special Transcoding Scenarios
 

@@ -110,7 +110,7 @@ struct basis_file
     if (m_magic != MAGIC)
       return 0;
 
-    if (format >= cTFTotalTextureFormats)
+    if (format >= (int)transcoder_texture_format::cTFTotalTextureFormats)
       return 0;
 
 	 uint32_t orig_width, orig_height, total_blocks;
@@ -132,7 +132,7 @@ struct basis_file
 		 // Compressed formats are 2D arrays of blocks.
 		 const uint32_t bytes_per_block = basis_get_bytes_per_block(transcoder_format);
 
-		 if (format == cTFPVRTC1_4_RGB || format == cTFPVRTC1_4_RGBA)
+		 if (transcoder_format == transcoder_texture_format::cTFPVRTC1_4_RGB || transcoder_format == transcoder_texture_format::cTFPVRTC1_4_RGBA)
 		 {
 			 // For PVRTC1, Basis only writes (or requires) total_blocks * bytes_per_block. But GL requires extra padding for very small textures: 
 			  // https://www.khronos.org/registry/OpenGL/extensions/IMG/IMG_texture_compression_pvrtc.txt
@@ -154,12 +154,14 @@ struct basis_file
     return m_transcoder.start_transcoding(m_file.data(), m_file.size());
   }
 
-  uint32_t transcodeImage(const emscripten::val& dst, uint32_t image_index, uint32_t level_index, uint32_t format, uint32_t pvrtc_wrap_addressing, uint32_t get_alpha_for_opaque_formats) {
+  uint32_t transcodeImage(const emscripten::val& dst, uint32_t image_index, uint32_t level_index, uint32_t format, uint32_t unused, uint32_t get_alpha_for_opaque_formats) {
+     (void)unused;
+     
 	  assert(m_magic == MAGIC);
 	  if (m_magic != MAGIC)
 		  return 0;
 
-	  if (format >= cTFTotalTextureFormats)
+	  if (format >= (int)transcoder_texture_format::cTFTotalTextureFormats)
 		  return 0;
 
 	  const transcoder_texture_format transcoder_format = static_cast<transcoder_texture_format>(format);
@@ -170,7 +172,7 @@ struct basis_file
 	  
 	  std::vector<uint8_t> dst_data;
 	  
-	  uint32_t flags = (pvrtc_wrap_addressing ? basisu_transcoder::cDecodeFlagsPVRTCWrapAddressing : 0) | (get_alpha_for_opaque_formats ? basisu_transcoder::cDecodeFlagsTranscodeAlphaDataToOpaqueFormats : 0);
+	  uint32_t flags = get_alpha_for_opaque_formats ? basisu_transcoder::cDecodeFlagsTranscodeAlphaDataToOpaqueFormats : 0;
 
 	  uint32_t status;
 
@@ -197,7 +199,7 @@ struct basis_file
 
 		  uint32_t required_size = total_blocks * bytes_per_block;
 
-		  if (format == cTFPVRTC1_4_RGB || format == cTFPVRTC1_4_RGBA)
+		  if (transcoder_format == transcoder_texture_format::cTFPVRTC1_4_RGB || transcoder_format == transcoder_texture_format::cTFPVRTC1_4_RGBA)
 		  {
 			  // For PVRTC1, Basis only writes (or requires) total_blocks * bytes_per_block. But GL requires extra padding for very small textures: 
 			  // https://www.khronos.org/registry/OpenGL/extensions/IMG/IMG_texture_compression_pvrtc.txt
@@ -255,8 +257,8 @@ EMSCRIPTEN_BINDINGS(basis_transcoder) {
     .function("startTranscoding", optional_override([](basis_file& self) {
       return self.startTranscoding();
     }))
-    .function("transcodeImage", optional_override([](basis_file& self, const emscripten::val& dst, uint32_t imageIndex, uint32_t levelIndex, uint32_t format, uint32_t pvrtcWrapAddressing, uint32_t getAlphaForOpaqueFormats) {
-      return self.transcodeImage(dst, imageIndex, levelIndex, format, pvrtcWrapAddressing, getAlphaForOpaqueFormats);
+    .function("transcodeImage", optional_override([](basis_file& self, const emscripten::val& dst, uint32_t imageIndex, uint32_t levelIndex, uint32_t format, uint32_t unused, uint32_t getAlphaForOpaqueFormats) {
+      return self.transcodeImage(dst, imageIndex, levelIndex, format, unused, getAlphaForOpaqueFormats);
     }))
   ;
 

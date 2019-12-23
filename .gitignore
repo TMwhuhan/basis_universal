@@ -1,5 +1,2 @@
-.vs/*
-out/*
-bin/*
-build/*
-.DS_Store
+bin/
+build/
