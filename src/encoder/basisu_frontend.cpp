@@ -17,11 +17,16 @@
 // This code originally supported full ETC1 and ETC1S, so there's some legacy stuff to be cleaned up in here.
 // Add endpoint tiling support (where we force adjacent blocks to use the same endpoints during quantization), for a ~10% or more increase in bitrate at same SSIM. The backend already supports this.
 //
+#define _CRT_SECURE_NO_WARNINGS
 #include "basisu_frontend.h"
 
 #include <transcoder/basisu.h>
 #include <unordered_set>
 #include <unordered_map>
+
+#if defined(_MSC_VER) && _MSC_VER < 1900
+#define snprintf _snprintf
+#endif
 
 #define BASISU_FRONTEND_VERIFY(c) do { if (!(c)) handle_verify_failure(__LINE__); } while(0)
 
@@ -30,7 +35,7 @@ namespace basisu
 	const uint32_t cMaxCodebookCreationThreads = 8;
 
 	const uint32_t BASISU_MAX_ENDPOINT_REFINEMENT_STEPS = 3;
-	const uint32_t BASISU_MAX_SELECTOR_REFINEMENT_STEPS = 3;
+	//const uint32_t BASISU_MAX_SELECTOR_REFINEMENT_STEPS = 3;
 
 	const uint32_t BASISU_ENDPOINT_PARENT_CODEBOOK_SIZE = 16;
 	const uint32_t BASISU_SELECTOR_PARENT_CODEBOOK_SIZE = 16;
@@ -838,8 +843,6 @@ namespace basisu
 				continue;
 #endif
 
-			const uint32_t new_endpoint_cluster_index = (uint32_t)m_endpoint_clusters.size();
-
 			enlarge_vector(m_endpoint_clusters, 1)->push_back(training_vector_index);
 			enlarge_vector(m_endpoint_cluster_etc_params, 1);
 
@@ -1086,8 +1089,6 @@ namespace basisu
 
 				for (uint32_t block_index = first_index; block_index < last_index; block_index++)
 				{
-					const bool is_flipped = true;
-			
 					const uint32_t cluster_index = block_clusters[block_index][0];
 					BASISU_FRONTEND_VERIFY(cluster_index == block_clusters[block_index][1]);
 
@@ -1939,7 +1940,6 @@ namespace basisu
 
 						const uint32_t block_index = training_vector_index >> 1;
 						const uint32_t subblock_index = training_vector_index & 1;
-						const bool is_flipped = true;
 
 						etc_block &blk = m_encoded_blocks[block_index];
 
